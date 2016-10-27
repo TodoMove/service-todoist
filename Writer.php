@@ -57,13 +57,18 @@ class Writer extends AbstractWriter
 
     private function isPremium()
     {
-        $response = json_decode($this->client->get('', [
-            'form_params' => [
-                'token' => $this->token,
-                'sync_token' => '*',
-                'resource_types' => '["user"]'
-            ],
-        ])->getBody(), true);
+        try {
+            $response = json_decode($this->client->get('', [
+                'form_params' => [
+                    'token' => $this->token,
+                    'sync_token' => '*',
+                    'resource_types' => '["user"]'
+                ],
+            ])->getBody(), true);
+        } catch (Exception $e) {
+            $this->isPremium = false;
+            return $this->isPremium;
+        }
 
         $this->isPremium = $response['user']['is_premium'];
 
@@ -127,8 +132,8 @@ class Writer extends AbstractWriter
             ])->getBody(), true);
         } catch (\Exception $e) { // Too many requests, we need to retry
             sleep(2);
-            if ($attempts > 20) {
-                Throw new \Exception('Attempted URL 20 times, it will not succeed: ' . $type . ' ' . implode(',', $args));
+            if ($attempts > 50) {
+                Throw new \Exception('Attempted URL 50 times, it will not succeed: ' . $type . ' ' . implode(',', $args));
             }
 
             return $this->makeRequest($type, $args, ++$attempts);
@@ -185,7 +190,7 @@ class Writer extends AbstractWriter
 
         $data = [
             'project_id' => $task->project()->meta('todoist-id'),
-            'content' => $task->title() . $this->taskTags($task),
+            'content' => $task->title(), // We could append $this->taskTags($task) here, but Todoist actually stores the labels/tags against a task, but just doesn't show them if you're not premium
             'starred' => $task->flagged(),
             'completed' => $task->completed(),
             'date_lang' => 'en',
