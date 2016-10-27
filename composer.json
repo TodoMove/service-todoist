@@ -1,0 +1,21 @@
+{
+    "name": "todomove/service-todoist",
+    "description": "Classes to read and write from Todoist utilising TodoMove's Intercessor classes",
+    "license": "MIT",
+    "keywords": ["todoist", "todomove"],
+    "authors": [
+        {
+            "name": "Ashley Hindle",
+            "email": "hey@ashleyhindle.com"
+        }
+    ],
+    "autoload": {
+        "psr-4": { "TodoMove\\Service\\Todoist\\" : "./" }
+    },
+    "require": {
+        "php": ">= 5.5",
+        "todomove/intercessor": "*",
+        "guzzlehttp/guzzle": "~6.2",
+        "ramsey/uuid": "~3.5"
+    }
+}
