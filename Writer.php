@@ -4,6 +4,7 @@ namespace TodoMove\Service\Todoist;
 
 use GuzzleHttp\Client;
 
+use GuzzleHttp\Exception\ClientException;
 use Ramsey\Uuid\Uuid;
 use TodoMove\Intercessor\Contracts\Service\Reader;
 use TodoMove\Intercessor\Folder;
@@ -116,22 +117,21 @@ class Writer extends AbstractWriter
     {
 
         $temp_id = $this->uuid();
-        $result = $this->client->post('', [
-            'form_params' => [
-                'token' => $this->token,
-                'commands' => json_encode([
-                    [
-                        'type' => $type,
-                        'uuid' => $this->uuid(),
-                        'temp_id' => $temp_id,
-                        'args' => $args
-                    ]
-                ]),
-            ],
-        ]);
-
-        // 429 == too many requests, so we'll sleep and try again and eventually give up
-        if ($result->getStatusCode() == 429) {
+        try {
+            $result = $this->client->post('', [
+                'form_params' => [
+                    'token' => $this->token,
+                    'commands' => json_encode([
+                        [
+                            'type' => $type,
+                            'uuid' => $this->uuid(),
+                            'temp_id' => $temp_id,
+                            'args' => $args
+                        ]
+                    ]),
+                ],
+            ]);
+        } catch (ClientException $e) {
             sleep(2);
             if ($attempts > 50) {
                 Throw new \Exception('Attempted URL 50 times, it will not succeed: ' . $type . ' ' . implode(',', $args));
@@ -139,6 +139,7 @@ class Writer extends AbstractWriter
 
             return $this->makeRequest($type, $args, ++$attempts);
         }
+
 
         $response = json_decode($result->getBody(), true);
         $id = $response['temp_id_mapping'][$temp_id] ?: $response['full']['temp_id_mapping'][$temp_id];
