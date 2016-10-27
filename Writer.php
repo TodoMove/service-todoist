@@ -126,11 +126,11 @@ class Writer extends AbstractWriter
                 ],
             ])->getBody(), true);
         } catch (\Exception $e) { // Too many requests, we need to retry
-            usleep(500);
+            sleep(2);
             if ($attempts > 20) {
                 Throw new \Exception('Attempted URL 20 times, it will not succeed: ' . $type . ' ' . implode(',', $args));
             }
-            
+
             return $this->makeRequest($type, $args, ++$attempts);
         }
 
