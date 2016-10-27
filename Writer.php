@@ -115,22 +115,23 @@ class Writer extends AbstractWriter
     private function makeRequest($type, array $args, $attempts = 0)
     {
 
-        try {
-            $temp_id = $this->uuid();
-            $response = json_decode($this->client->post('', [
-                'form_params' => [
-                    'token' => $this->token,
-                    'commands' => json_encode([
-                        [
-                            'type' => $type,
-                            'uuid' => $this->uuid(),
-                            'temp_id' => $temp_id,
-                            'args' => $args
-                        ]
-                    ]),
-                ],
-            ])->getBody(), true);
-        } catch (\Exception $e) { // Too many requests, we need to retry
+        $temp_id = $this->uuid();
+        $result = $this->client->post('', [
+            'form_params' => [
+                'token' => $this->token,
+                'commands' => json_encode([
+                    [
+                        'type' => $type,
+                        'uuid' => $this->uuid(),
+                        'temp_id' => $temp_id,
+                        'args' => $args
+                    ]
+                ]),
+            ],
+        ]);
+
+        // 429 == too many requests, so we'll sleep and try again and eventually give up
+        if ($result->getStatusCode() == 429) {
             sleep(2);
             if ($attempts > 50) {
                 Throw new \Exception('Attempted URL 50 times, it will not succeed: ' . $type . ' ' . implode(',', $args));
@@ -139,6 +140,7 @@ class Writer extends AbstractWriter
             return $this->makeRequest($type, $args, ++$attempts);
         }
 
+        $response = json_decode($result->getBody(), true);
         $id = $response['temp_id_mapping'][$temp_id] ?: $response['full']['temp_id_mapping'][$temp_id];
 
         return [
