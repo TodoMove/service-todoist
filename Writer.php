@@ -107,9 +107,9 @@ class Writer extends AbstractWriter
                 ],
             ]);
         } catch (ClientException $e) {
-            sleep(2);
-            if ($attempts > 10) {
-                Throw new \Exception('Attempted URL 50 times, it will not succeed: ' . print_r($commands, true));
+            sleep(1);
+            if ($attempts > 5) {
+                Throw new \Exception('Attempted URL 5 times, it will not succeed ' . $e->getMessage() . ': ' . print_r($commands, true));
             }
 
             return $this->makeMultipleRequest($commands, ++$attempts);
