@@ -1,5 +1,6 @@
 # TodoMove\Intercessor\Service\Todoist Package Base
 
+* Reader: `TodoMove\Intercessor\Service\Todoist\Reader`
 * Writer : `TodoMove\Intercessor\Service\Todoist\Writer`
 
 # How to use

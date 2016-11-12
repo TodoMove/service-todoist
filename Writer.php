@@ -62,7 +62,7 @@ class Writer extends AbstractWriter
                 'form_params' => [
                     'token' => $this->token,
                     'sync_token' => '*',
-                    'resource_types' => '["user"]'
+                    'resource_types' => json_encode(['user'])
                 ],
             ])->getBody(), true);
         } catch (Exception $e) {

@@ -3,7 +3,14 @@ require __DIR__ . '/vendor/autoload.php';
 
 $clientId = getenv('CLIENTID');
 $token = getenv('TOKEN');
+
 $writer = new TodoMove\Service\Todoist\Writer($clientId, $token);
+$reader = new TodoMove\Service\Todoist\Reader($clientId, $token);
+
+print_r($reader->tags());
+print_r($reader->folders());
+print_r($reader->projects());
+print_r($reader->tasks());
 
 $project = new \TodoMove\Intercessor\Project('Mah project ' . rand(10090, 99999));
 $project2 = new \TodoMove\Intercessor\Project('Mah project ' . rand(10090, 99999));
