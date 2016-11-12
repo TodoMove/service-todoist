@@ -18,7 +18,6 @@ use TodoMove\Intercessor\Task;
  *
  * https://developer.todoist.com/
  *
- *
  * Need to create the folders last, as to create a folder you need to pass in list_ids returned from POST /lists
  *
  * Projects = Projects (no repeating or label)
@@ -84,73 +83,45 @@ class Writer extends AbstractWriter
     {
         $this->syncTags($reader->tags());
         $this->syncFolders($reader->folders());
+        $this->syncProjects($reader->projects());
         $this->syncTasks($reader->tasks());
     }
 
     public function syncFolder(Folder $folder)
     {
-        // We're actually going to add folders with an indent of 1, then projects with a folder will have an indent of 2
-
-        $response = $this->makeRequest('project_add', ['name' => $folder->name(), 'indent' => 1]);
-        $folder->meta('todoist-id', $response['id']);
-
-        foreach ($folder->projects() as $project) {
-            $this->syncProject($project); // We do it this way so they'll be in order within Todoist as projects aren't linked together they're simply indented
-        }
-
-        return $response;
-
+        return $this->syncFolders([$folder]);
     }
 
     public function syncProject(Project $project)
     {
-        // TODO: Check for errors
-
-        $indent = ($project->folder()) ? 2 : 1; // If it has a folder, it's indent is higher
-        $response = $this->makeRequest('project_add', ['name' => $project->name(), 'indent' => $indent]);
-        $project->meta('todoist-id', $response['id']);
-
-        return $response;
+        return $this->syncProjects([$project]);
     }
 
-    private function makeRequest($type, array $args, $attempts = 0)
+    private function makeMultipleRequest(array $commands, $attempts = 0)
     {
-
-        $temp_id = $this->uuid();
         try {
             $result = $this->client->post('', [
                 'form_params' => [
                     'token' => $this->token,
-                    'commands' => json_encode([
-                        [
-                            'type' => $type,
-                            'uuid' => $this->uuid(),
-                            'temp_id' => $temp_id,
-                            'args' => $args
-                        ]
-                    ]),
+                    'commands' => json_encode($commands),
                 ],
             ]);
         } catch (ClientException $e) {
             sleep(2);
-            if ($attempts > 50) {
-                Throw new \Exception('Attempted URL 50 times, it will not succeed: ' . $type . ' ' . implode(',', $args));
+            if ($attempts > 10) {
+                Throw new \Exception('Attempted URL 50 times, it will not succeed: ' . print_r($commands, true));
             }
 
-            return $this->makeRequest($type, $args, ++$attempts);
+            return $this->makeMultipleRequest($commands, ++$attempts);
         }
 
-
         $response = json_decode($result->getBody(), true);
-        $id = $response['temp_id_mapping'][$temp_id] ?: $response['full']['temp_id_mapping'][$temp_id];
 
-        return [
-            'id' => $id,
-            'full' => $response
-        ];
+        return $response;
     }
 
-    private function convertRepeat(Repeat $repeat) {
+    private function convertRepeat(Repeat $repeat)
+    {
         $dateString = 'every';
         $dateString .= ($repeat->interval() > 1) ? ' ' . $repeat->interval() : '';
         $dateString .= ' ';
@@ -178,10 +149,8 @@ class Writer extends AbstractWriter
         return $dateString;
     }
 
-    public function syncTask(Task $task)
+    protected function buildTaskCommand(Task $task)
     {
-        // TODO: Check for errors
-
         $labelIds = [];
 
         // Make sure to sync tags before tasks
@@ -215,15 +184,17 @@ class Writer extends AbstractWriter
             $data['date_string'] = $this->convertRepeat($task->project()->repeat());
         }
 
-        $response = $this->makeRequest('item_add', $data);
+        return [
+            'type' => 'item_add',
+            'uuid' => $this->uuid(),
+            'temp_id' => $task->id(),
+            'args' => $data
+        ];
+    }
 
-        $task->meta('todoist-id', $response['id']);
-
-        if (!empty($task->notes())) {
-            $this->addNote($task);
-        }
-
-        return $response;
+    public function syncTask(Task $task)
+    {
+        return $this->syncTasks([$task]);
     }
 
     // If the user doesn't have premium, we'll put the tags in the task title (except hashtags are project names so we'll use %)
@@ -242,23 +213,26 @@ class Writer extends AbstractWriter
         Return $tags;
     }
 
-    public function addNote(Task $task) // TODO: Figure out non-premium way of handling this
+    public function buildNotecommand(Task $task) // TODO: Figure out non-premium way of handling this
     {
         if (!$this->isPremium) {
-            return '';
+            return null;
         }
 
-        $response = $this->makeRequest('note_add', ['content' => $task->notes(), 'item_id' => $task->meta('todoist-id')]);
-
-        return $response;
+        return [
+            'type' => 'note_add',
+            'uuid' => $this->uuid(),
+            'temp_id' => $this->uuid(),
+            'args' => [
+                'content' => $task->notes(),
+                'item_id' => $task->id()
+            ]
+        ];
     }
 
     public function syncTag(Tag $tag)
     {
-        $response = $this->makeRequest('label_add', ['name' => $tag->title()]);
-        $tag->meta('todoist-id', $response['id']);
-
-        return $response;
+        return $this->syncTags([$tag]);
     }
 
     protected function uuid()
@@ -266,44 +240,93 @@ class Writer extends AbstractWriter
         return Uuid::uuid4()->toString();
     }
 
-    protected function syncFolders(array $folders)
+    public function syncFolders(array $folders)
     {
-        //TODO: Loop, and use $this->syncFolder(Folder $folder) to hit appropriate API's to add folders / throw exceptions.  Handling errors will be tough?
-        //TODO: error checking, counting total and synced
+        $commands = [];
+
+        /** @var Folder $folder */
         foreach ($folders as $folder) {
-            $this->syncFolder($folder);
+            $commands[] = [
+                'type' => 'project_add',
+                'uuid' => $this->uuid(),
+                'temp_id' => $folder->id(),
+                'args' => ['name' => $folder->name(), 'indent' => 1]
+            ];
+        }
+
+        $mappings = $this->makeMultipleRequest($commands)['temp_id_mapping'];
+
+        foreach ($folders as $folder) {
+            $folder->meta('todoist-id', $mappings[$folder->id()]);
         }
 
         return $this;
     }
 
-    protected function syncProjects(array $projects)
+    public function syncProjects(array $projects)
     {
-        //TODO: Loop, and use $this->syncProject(Project $project) to hit appropriate API's to add folders / throw exceptions.  Handling errors will be tough?
-        //TODO: error checking, counting total and synced
+        $commands = [];
+
+        /** @var Project $project */
         foreach ($projects as $project) {
-            $this->syncProject($project);
+            $indent = ($project->folder()) ? 2 : 1; // If it has a folder, it's indent is higher
+
+            $commands[] = [
+                'type' => 'project_add',
+                'uuid' => $this->uuid(),
+                'temp_id' => $project->id(),
+                'args' => ['name' => $project->name(), 'indent' => $indent]
+            ];
+        }
+
+        $mappings = $this->makeMultipleRequest($commands)['temp_id_mapping'];
+
+        foreach ($projects as $project) {
+            $project->meta('todoist-id', $mappings[$project->id()]);
         }
 
         return $this;
     }
 
-    protected function syncTags(array $tags)
+    /**
+     * @param Tag[] $tags
+     * @return $this
+     */
+    public function syncTags(array $tags)
     {
+        $commands = [];
+
+        /** @var Tag $tag */
         foreach ($tags as $tag) {
-            $this->syncTag($tag);
+            $commands[] = [
+                'type' => 'label_add',
+                'uuid' => $this->uuid(),
+                'temp_id' => $tag->id(),
+                'args' => ['name' => $tag->title()]
+            ];
+        }
+
+        $mappings = $this->makeMultipleRequest($commands)['temp_id_mapping'];
+
+        foreach ($tags as $tag) {
+            $tag->meta('todoist-id', $mappings[$tag->id()]);
         }
 
         return $this;
     }
 
-    protected function syncTasks(array $tasks)
+    public function syncTasks(array $tasks)
     {
-        //TODO: Loop, and use $this->syncTag(Tag $tag) to hit appropriate API's to add folders / throw exceptions.  Handling errors will be tough?
-        //TODO: error checking, counting total and synced
+        $commands = [];
         foreach ($tasks as $task) {
-            $this->syncTask($task);
+            $commands[] = $this->buildTaskCommand($task);
+            $noteCommand = $this->buildNotecommand($task);
+            if (!is_null($noteCommand)) {
+                $commands[] = $noteCommand;
+            }
         }
+
+        $mappings = $this->makeMultipleRequest($commands)['temp_id_mapping'];
 
         return $this;
     }
