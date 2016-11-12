@@ -100,12 +100,15 @@ class Writer extends AbstractWriter
     private function makeMultipleRequest(array $commands, $attempts = 0)
     {
         try {
-            $result = $this->client->post('', [
-                'form_params' => [
-                    'token' => $this->token,
-                    'commands' => json_encode($commands),
-                ],
-            ]);
+            $chunks = array_chunk($commands, 100);
+            foreach ($chunks as $chunk) {
+                $result = $this->client->post('', [
+                    'form_params' => [
+                        'token' => $this->token,
+                        'commands' => json_encode($chunk),
+                    ],
+                ]);
+            }
         } catch (ClientException $e) {
             sleep(1);
             if ($attempts > 5) {
