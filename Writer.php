@@ -87,6 +87,11 @@ class Writer extends AbstractWriter
         $this->syncTasks($reader->tasks());
     }
 
+    public function syncTag(Tag $tag)
+    {
+        return $this->syncTags([$tag]);
+    }
+
     public function syncFolder(Folder $folder)
     {
         return $this->syncFolders([$folder]);
@@ -95,6 +100,11 @@ class Writer extends AbstractWriter
     public function syncProject(Project $project)
     {
         return $this->syncProjects([$project]);
+    }
+
+    public function syncTask(Task $task)
+    {
+        return $this->syncTasks([$task]);
     }
 
     private function makeMultipleRequest(array $commands, $attempts = 0)
@@ -112,7 +122,9 @@ class Writer extends AbstractWriter
         } catch (ClientException $e) {
             sleep(1);
             if ($attempts > 5) {
-                Throw new \Exception('Attempted URL 5 times, it will not succeed ' . $e->getMessage() . ': ' . print_r($commands, true));
+                // Problem with this is that it will reattempt all commands, not just the unsynced ones
+                // TODO: Improve error handling
+                throw new \Exception('Attempted URL 5 times, it will not succeed ' . $e->getMessage() . ': ' . print_r($commands, true));
             }
 
             return $this->makeMultipleRequest($commands, ++$attempts);
@@ -195,11 +207,6 @@ class Writer extends AbstractWriter
         ];
     }
 
-    public function syncTask(Task $task)
-    {
-        return $this->syncTasks([$task]);
-    }
-
     // If the user doesn't have premium, we'll put the tags in the task title (except hashtags are project names so we'll use %)
     public function taskTags(Task $task)
     {
@@ -210,7 +217,7 @@ class Writer extends AbstractWriter
         $tags = '';
         /** @var Tag $tag */
         foreach ($task->tags() as $tag) {
-            $tags .= ' %' . $tag->title();
+            $tags .= ' @' . $tag->title();
         }
 
         Return $tags;
@@ -233,11 +240,6 @@ class Writer extends AbstractWriter
         ];
     }
 
-    public function syncTag(Tag $tag)
-    {
-        return $this->syncTags([$tag]);
-    }
-
     protected function uuid()
     {
         return Uuid::uuid4()->toString();
@@ -245,47 +247,63 @@ class Writer extends AbstractWriter
 
     public function syncFolders(array $folders)
     {
-        $commands = [];
-
-        /** @var Folder $folder */
-        foreach ($folders as $folder) {
-            $commands[] = [
-                'type' => 'project_add',
-                'uuid' => $this->uuid(),
-                'temp_id' => $folder->id(),
-                'args' => ['name' => $folder->name(), 'indent' => 1]
-            ];
-        }
+        $commands = $this->buildCommands($folders, 'project_add', function ($item) {
+            return ['name' => $item->name(), 'indent' => 1];
+        });
 
         $mappings = $this->makeMultipleRequest($commands)['temp_id_mapping'];
 
-        foreach ($folders as $folder) {
-            $folder->meta('todoist-id', $mappings[$folder->id()]);
-        }
-
-        return $this;
+        return $this->addMeta($folders, $mappings);
     }
 
     public function syncProjects(array $projects)
     {
-        $commands = [];
-
-        /** @var Project $project */
-        foreach ($projects as $project) {
-            $indent = ($project->folder()) ? 2 : 1; // If it has a folder, it's indent is higher
-
-            $commands[] = [
-                'type' => 'project_add',
-                'uuid' => $this->uuid(),
-                'temp_id' => $project->id(),
-                'args' => ['name' => $project->name(), 'indent' => $indent]
-            ];
-        }
+        $commands = $this->buildCommands($projects, 'project_add', function ($item) {
+            return ['name' => $item->name(), 'indent' => ($item->folder()) ? 2 : 1];
+        });
 
         $mappings = $this->makeMultipleRequest($commands)['temp_id_mapping'];
 
-        foreach ($projects as $project) {
-            $project->meta('todoist-id', $mappings[$project->id()]);
+        return $this->addMeta($projects, $mappings);
+    }
+
+    /**
+     * Builds an array of commands to send to todoist.  Items passed in _must_ use the Metable trait
+     *
+     * @param array $items
+     * @param string $type
+     * @param $callback
+     *
+     * @return array
+     */
+    public function buildCommands(array $items, $type, $callback)
+    {
+        $commands = [];
+
+        foreach ($items as $item) {
+            $commands[] = [
+                'type' => $type,
+                'uuid' => $this->uuid(),
+                'temp_id' => $item->id(),
+                'args' => $callback($item)
+            ];
+        }
+
+        return $commands;
+    }
+
+    /**
+     * Adds meta 'todoist-id' key with the items uuid - items must use Identifiable trait
+     *
+     * @param array $items
+     * @param array $mappings
+     *
+     * @return $this
+     */
+    public function addMeta(array $items, array $mappings)
+    {
+        foreach ($items as $item) {
+            $item->meta('todoist-id', $mappings[$item->id()]);
         }
 
         return $this;
@@ -297,25 +315,13 @@ class Writer extends AbstractWriter
      */
     public function syncTags(array $tags)
     {
-        $commands = [];
-
-        /** @var Tag $tag */
-        foreach ($tags as $tag) {
-            $commands[] = [
-                'type' => 'label_add',
-                'uuid' => $this->uuid(),
-                'temp_id' => $tag->id(),
-                'args' => ['name' => $tag->title()]
-            ];
-        }
+        $commands = $this->buildCommands($tags, 'label_add', function ($item) {
+            return ['name' => $item->title()];
+        });
 
         $mappings = $this->makeMultipleRequest($commands)['temp_id_mapping'];
 
-        foreach ($tags as $tag) {
-            $tag->meta('todoist-id', $mappings[$tag->id()]);
-        }
-
-        return $this;
+        return $this->addMeta($tags, $mappings);
     }
 
     public function syncTasks(array $tasks)
@@ -331,6 +337,6 @@ class Writer extends AbstractWriter
 
         $mappings = $this->makeMultipleRequest($commands)['temp_id_mapping'];
 
-        return $this;
+        return $this->addMeta($tasks, $mappings);
     }
 }
