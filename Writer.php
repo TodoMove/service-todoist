@@ -6,7 +6,7 @@ use GuzzleHttp\Client;
 
 use GuzzleHttp\Exception\ClientException;
 use Ramsey\Uuid\Uuid;
-use TodoMove\Intercessor\Contracts\Service\Reader;
+use TodoMove\Intercessor\Contracts\Service\Reader as ReaderContract;
 use TodoMove\Intercessor\Folder;
 use TodoMove\Intercessor\Project;
 use TodoMove\Intercessor\Repeat;
@@ -79,7 +79,7 @@ class Writer extends AbstractWriter
     // TODO: Maybe we need an event/callback: $project->onSync(function($project) { echo::default('project.synced', $project); });
 
     /** @inheritdoc */
-    public function syncFrom(Reader $reader)
+    public function syncFrom(ReaderContract $reader)
     {
         $this->syncTags($reader->tags());
         $this->syncFolders($reader->folders());
