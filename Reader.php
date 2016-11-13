@@ -161,18 +161,6 @@ class Reader extends \TodoMove\Intercessor\Service\AbstractReader
      */
     public function parseTasks()
     {
-        /*
-  array(24) {
-    ["all_day"]=>
-    bool(true)
-    ["date_lang"]=>
-    string(2) "en"
-    ["has_more_notes"]=>
-    bool(false)
-    ["date_string"]=>
-    string(6) "15 Nov"
-
-         */
         foreach ($this->all['items'] as $item) {
             if ($item['is_deleted'] || $item['checked']) {
                 continue;
@@ -196,8 +184,6 @@ class Reader extends \TodoMove\Intercessor\Service\AbstractReader
             if (!empty($item['due_date_utc'])) {
                 $task->due(new \DateTime($item['due_date_utc']));
             }
-
-            //TODO: Major - parse date string for recurrence
 
             // Recurrence
             if (!empty($item['date_string']) && strpos(strtolower($item['date_string']), 'every ') === 0) {
@@ -256,11 +242,9 @@ class Reader extends \TodoMove\Intercessor\Service\AbstractReader
         }
 
         // every X [days|weeks|months|year]
-        $supported = preg_match('/(?<interval>[0-9]) (?<type>[a-z]+)/', $dateString, $matches);
+        $supported = preg_match('/(?<interval>[0-9]+) (?<type>[a-z]+)/', $dateString, $matches);
         if (!$supported) {
-            echo "====== UNSUPPORTED REPEAT ======" . PHP_EOL;
-            var_dump($dateString);
-            exit;
+            throw new \Exception('Unsupported repeat string: ' . $dateString);
         }
 
         switch ($matches['type']) {
