@@ -247,6 +247,10 @@ class Reader extends \TodoMove\Intercessor\Service\AbstractReader
             throw new \Exception('Unsupported repeat string: ' . $dateString);
         }
 
+        if (empty($matches['interval']) || !is_numeric($matches['interval'])) {
+            throw new \Exception('Invalid interval in repeat: "' . $matches['interval'] . '": ' . var_export($matches));
+        }
+
         switch ($matches['type']) {
             case 'days':
                 $repeat->interval($matches['interval']);
