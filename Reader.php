@@ -12,7 +12,7 @@ use TodoMove\Intercessor\Task;
 
 class Reader extends \TodoMove\Intercessor\Service\AbstractReader
 {
-    protected $client;
+    public $client;
     private $token;
     private $isPremium = false;
     private $all = [];
