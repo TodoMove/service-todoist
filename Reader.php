@@ -165,6 +165,11 @@ class Reader extends \TodoMove\Intercessor\Service\AbstractReader
             if ($item['is_deleted'] || $item['checked']) {
                 continue;
             }
+
+            if (!in_array($item['project_id'], $this->projectIds)) {
+                continue;
+            }
+
             $task = new Task($item['content']);
             $task->project($this->projectIds[$item['project_id']]);
 
