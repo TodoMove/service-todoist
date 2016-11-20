@@ -166,7 +166,7 @@ class Reader extends \TodoMove\Intercessor\Service\AbstractReader
                 continue;
             }
 
-            if (!in_array($item['project_id'], $this->projectIds)) {
+            if (!array_key_exists($item['project_id'], $this->projectIds)) {
                 continue;
             }
 
